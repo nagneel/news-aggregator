@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>News Aggregator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f7f7f5;
+    --surface:   #ffffff;
+    --border:    #e4e4e0;
+    --text:      #1a1a18;
+    --muted:     #6b6b66;
+    --accent:    #1d4ed8;
+    --accent-subtle: #eff3fe;
+    --green:     #16a34a;
+    --green-subtle: #f0fdf4;
+    --amber:     #d97706;
+    --amber-subtle: #fffbeb;
+    --gray:      #9ca3af;
+    --gray-subtle: #f3f4f6;
+    --red:       #dc2626;
+    --red-subtle: #fef2f2;
+    --radius:    8px;
+    --radius-sm: 6px;
+    --shadow:    0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.07), 0 1px 3px rgba(0,0,0,.04);
+  }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Header ---- */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo {
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -.3px;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  .logo span { color: var(--accent); }
+
+  .search-wrap {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+    max-width: 600px;
+  }
+
+  #query {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+    min-width: 0;
+  }
+
+  #query:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(29,78,216,.1);
+  }
+
+  #search-btn {
+    padding: 8px 16px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s, opacity .15s;
+  }
+
+  #search-btn:hover:not(:disabled) { background: #1e40af; }
+  #search-btn:active:not(:disabled) { background: #1e3a8a; }
+  #search-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #search-btn:disabled { opacity: .5; cursor: default; }
+
+  /* ---- Main ---- */
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+
+  /* ---- Status / progress area ---- */
+  #status {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    min-height: 20px;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Progress bar for source loading */
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width .3s ease-out;
+    width: 0%;
+  }
+
+  .source-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .source-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    transition: all .25s ease-out;
+  }
+
+  .source-chip.loaded {
+    color: var(--green);
+    border-color: #bbf7d0;
+    background: var(--green-subtle);
+  }
+
+  .source-chip.failed {
+    color: var(--red);
+    border-color: #fecaca;
+    background: var(--red-subtle);
+  }
+
+  .source-chip .chip-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  /* ---- Cluster cards ---- */
+  .cluster {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: box-shadow .2s;
+  }
+
+  .cluster:hover { box-shadow: var(--shadow-md); }
+
+  .cluster-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .12s;
+  }
+
+  .cluster-header:hover { background: var(--bg); }
+
+  .cluster-toggle {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    color: var(--muted);
+    transition: transform .2s ease-out;
+  }
+
+  .cluster.open .cluster-toggle { transform: rotate(90deg); }
+
+  .cluster-headline {
+    font-weight: 600;
+    font-size: 15px;
+    flex: 1;
+    line-height: 1.4;
+  }
+
+  .cluster-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .badge {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 1px 9px;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .cluster-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: flex-end;
+  }
+
+  .source-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 7px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .source-pill img {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ---- Article list ---- */
+  .cluster-body {
+    display: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .cluster.open .cluster-body { display: block; }
+
+  .article {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    text-decoration: none;
+    color: inherit;
+    transition: background .12s;
+  }
+
+  .article:last-child { border-bottom: none; }
+  .article:hover { background: var(--bg); }
+  .article:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  .rel-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 6px;
+  }
+
+  .rel-dot.high   { background: var(--green); }
+  .rel-dot.medium { background: var(--amber); }
+  .rel-dot.low    { background: var(--gray);  }
+
+  .article-info { flex: 1; min-width: 0; }
+
+  .article-title {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+    margin-bottom: 2px;
+  }
+
+  .article-desc {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.4;
+    margin-bottom: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    /* Hidden by default, shown on hover via JS class */
+    max-height: 0;
+    opacity: 0;
+    transition: max-height .25s ease-out, opacity .2s ease-out, margin .2s ease-out;
+  }
+
+  .article-desc.visible,
+  .article:hover .article-desc:not(:empty),
+  .article:focus-within .article-desc:not(:empty) {
+    max-height: 60px;
+    opacity: 1;
+    margin-bottom: 4px;
+  }
+
+  .article-meta {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .article-source {
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .article-source img {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+  }
+
+  .article-date { color: var(--muted); }
+
+  /* ---- Empty / error states ---- */
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    padding: 64px 24px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .empty-state-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 16px;
+    color: var(--border);
+  }
+
+  .empty-state-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .empty-state-msg {
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  .error-banner {
+    background: var(--red-subtle);
+    border: 1px solid #fecaca;
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--red);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .error-banner svg { flex-shrink: 0; margin-top: 1px; }
+
+  /* ---- Hidden count footer ---- */
+  .hidden-footer {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    padding: 16px 0;
+  }
+
+  /* ---- Welcome state ---- */
+  .welcome {
+    text-align: center;
+    padding: 80px 24px;
+    color: var(--muted);
+  }
+
+  .welcome-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .welcome-sub {
+    font-size: 14px;
+    max-width: 400px;
+    margin: 0 auto 24px;
+    line-height: 1.5;
+  }
+
+  .welcome-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .suggest-btn {
+    padding: 6px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text);
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+
+  .suggest-btn:hover {
+    background: var(--accent-subtle);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .suggest-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---- Skeleton loader ---- */
+  @keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+
+  .skeleton-cluster {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .skeleton-line {
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--bg) 25%, #eaeae6 37%, var(--bg) 63%);
+    background-size: 800px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  .skeleton-line.w-75 { width: 75%; }
+  .skeleton-line.w-50 { width: 50%; margin-top: 10px; }
+  .skeleton-line.w-30 { width: 30%; margin-top: 8px; }
+
+  /* ---- Animations ---- */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .cluster {
+    animation: fadeInUp .3s ease-out both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cluster { animation: none; }
+    .spinner { animation-duration: 1.5s; }
+    .article-desc { transition: none; }
+    .skeleton-line { animation: none; background: var(--bg); }
+  }
+
+  /* ---- Filter bar ---- */
+  #filter-bar {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 0 10px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  #filter-bar.visible { display: flex; }
+
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    min-width: 68px;
+    flex-shrink: 0;
+  }
+
+  .filter-pill {
+    padding: 3px 11px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 12px;
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+    white-space: nowrap;
+    line-height: 1.6;
+  }
+  .filter-pill:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-pill.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 500;
+  }
+  .filter-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 640px) {
+    header {
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      gap: 8px;
+    }
+
+    .logo { font-size: 15px; }
+
+    .search-wrap {
+      flex-basis: 100%;
+      order: 1;
+      max-width: none;
+    }
+
+    #query { font-size: 16px; /* prevent iOS zoom */ }
+
+    main { padding: 16px 12px 48px; }
+
+    .cluster-header { padding: 12px; }
+    .article { padding: 10px 12px; }
+
+    .cluster-meta { flex-direction: row; align-items: center; flex-wrap: wrap; }
+
+    .badge { font-size: 11px; padding: 1px 7px; }
+
+    .article-desc:not(:empty) {
+      max-height: 60px;
+      opacity: 1;
+      margin-bottom: 4px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">news<span>&#183;agg</span></div>
+  <div class="search-wrap">
+    <input id="query" type="text" placeholder="Search headlines..." autocomplete="off"
+           aria-label="Search query">
+    <button id="search-btn" aria-label="Search">Search</button>
+  </div>
+</header>
+
+<main>
+  <div id="status"></div>
+  <div id="filter-bar">
+    <div class="filter-row">
+      <span class="filter-label">Time</span>
+      <button class="filter-pill active" data-filter="time" data-value="all">All time</button>
+      <button class="filter-pill" data-filter="time" data-value="1">Today</button>
+      <button class="filter-pill" data-filter="time" data-value="3">3 days</button>
+      <button class="filter-pill" data-filter="time" data-value="7">7 days</button>
+      <button class="filter-pill" data-filter="time" data-value="30">30 days</button>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Sort</span>
+      <button class="filter-pill active" data-filter="sort" data-value="relevance">Relevance</button>
+      <button class="filter-pill" data-filter="sort" data-value="newest">Newest first</button>
+      <button class="filter-pill" data-filter="sort" data-value="coverage">Most coverage</button>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Category</span>
+      <button class="filter-pill active" data-filter="cat" data-value="all">All</button>
+      <button class="filter-pill" data-filter="cat" data-value="world">World</button>
+      <button class="filter-pill" data-filter="cat" data-value="tech">Tech</button>
+      <button class="filter-pill" data-filter="cat" data-value="business">Business</button>
+      <button class="filter-pill" data-filter="cat" data-value="science">Science</button>
+      <button class="filter-pill" data-filter="cat" data-value="politics">Politics</button>
+      <button class="filter-pill" data-filter="cat" data-value="sports">Sports</button>
+      <button class="filter-pill" data-filter="cat" data-value="entertainment">Entertainment</button>
+    </div>
+  </div>
+  <div id="results">
+    <div class="welcome">
+      <div class="welcome-title">Search the news</div>
+      <div class="welcome-sub">
+        Enter a topic to aggregate and cluster headlines from 90+ sources across news, tech, science, politics, and more.
+      </div>
+      <div class="welcome-suggestions">
+        <button class="suggest-btn" data-q="artificial intelligence">artificial intelligence</button>
+        <button class="suggest-btn" data-q="climate change">climate change</button>
+        <button class="suggest-btn" data-q="space exploration">space exploration</button>
+        <button class="suggest-btn" data-q="cybersecurity">cybersecurity</button>
+        <button class="suggest-btn" data-q="electric vehicles">electric vehicles</button>
+        <button class="suggest-btn" data-q="stock market">stock market</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="news.js"></script>
+<script>
+'use strict';
+
+/* ---- Config ----------------------------------------------------------- */
+
+/* ---- Categorized RSS feeds (~90 sources) -------------------------------- */
+
+const CATEGORIZED_FEEDS = [
+  // World / General
+  { name: 'BBC World',        url: 'http://feeds.bbci.co.uk/news/world/rss.xml',                        cat: 'world',   domain: 'bbc.co.uk' },
+  { name: 'BBC News',         url: 'http://feeds.bbci.co.uk/news/rss.xml',                              cat: 'world',   domain: 'bbc.co.uk' },
+  { name: 'Guardian World',   url: 'https://www.theguardian.com/world/rss',                             cat: 'world',   domain: 'theguardian.com' },
+  { name: 'Reuters',          url: 'https://feeds.reuters.com/reuters/topNews',                         cat: 'world',   domain: 'reuters.com' },
+  { name: 'NPR News',         url: 'https://feeds.npr.org/1001/rss.xml',                               cat: 'world',   domain: 'npr.org' },
+  { name: 'Al Jazeera',       url: 'https://www.aljazeera.com/xml/rss/all.xml',                        cat: 'world',   domain: 'aljazeera.com' },
+  { name: 'The Hill',         url: 'https://thehill.com/feed/',                                        cat: 'world',   domain: 'thehill.com' },
+  { name: 'Axios',            url: 'https://www.axios.com/feeds/feed.rss',                             cat: 'world',   domain: 'axios.com' },
+  { name: 'Vox',              url: 'https://www.vox.com/rss/index.xml',                               cat: 'world',   domain: 'vox.com' },
+  { name: 'Time',             url: 'https://time.com/feed/',                                           cat: 'world',   domain: 'time.com' },
+  { name: 'Newsweek',         url: 'https://www.newsweek.com/rss',                                     cat: 'world',   domain: 'newsweek.com' },
+  { name: 'CBS News',         url: 'https://www.cbsnews.com/latest/rss/main',                          cat: 'world',   domain: 'cbsnews.com' },
+  { name: 'ABC News',         url: 'https://abcnews.go.com/abcnews/topstories',                        cat: 'world',   domain: 'abcnews.go.com' },
+  { name: 'PBS NewsHour',     url: 'https://www.pbs.org/newshour/feeds/rss/headlines',                 cat: 'world',   domain: 'pbs.org' },
+  { name: 'CBC News',         url: 'https://www.cbc.ca/cmlink/rss-topstories',                         cat: 'world',   domain: 'cbc.ca' },
+  { name: 'Foreign Policy',   url: 'https://foreignpolicy.com/feed/',                                  cat: 'world',   domain: 'foreignpolicy.com' },
+  { name: 'USA Today',        url: 'http://rssfeeds.usatoday.com/usatoday-NewsTopStories',             cat: 'world',   domain: 'usatoday.com' },
+  { name: 'The Independent',  url: 'https://www.independent.co.uk/news/rss',                           cat: 'world',   domain: 'independent.co.uk' },
+  { name: 'Sky News',         url: 'https://feeds.skynews.com/feeds/rss/world.xml',                    cat: 'world',   domain: 'news.sky.com' },
+  { name: 'DW News',          url: 'https://rss.dw.com/rdf/rss-en-all',                               cat: 'world',   domain: 'dw.com' },
+  // Technology
+  { name: 'TechCrunch',       url: 'https://techcrunch.com/feed/',                                     cat: 'tech',    domain: 'techcrunch.com' },
+  { name: 'The Verge',        url: 'https://www.theverge.com/rss/index.xml',                           cat: 'tech',    domain: 'theverge.com' },
+  { name: 'Ars Technica',     url: 'https://feeds.arstechnica.com/arstechnica/index',                  cat: 'tech',    domain: 'arstechnica.com' },
+  { name: 'Wired',            url: 'https://www.wired.com/feed/rss',                                   cat: 'tech',    domain: 'wired.com' },
+  { name: 'Engadget',         url: 'https://www.engadget.com/rss.xml',                                 cat: 'tech',    domain: 'engadget.com' },
+  { name: 'Gizmodo',          url: 'https://gizmodo.com/rss',                                          cat: 'tech',    domain: 'gizmodo.com' },
+  { name: 'VentureBeat',      url: 'https://venturebeat.com/feed/',                                    cat: 'tech',    domain: 'venturebeat.com' },
+  { name: 'CNET',             url: 'https://www.cnet.com/rss/news/',                                   cat: 'tech',    domain: 'cnet.com' },
+  { name: 'ZDNet',            url: 'https://www.zdnet.com/news/rss.xml',                               cat: 'tech',    domain: 'zdnet.com' },
+  { name: 'MIT Tech Review',  url: 'https://www.technologyreview.com/feed/',                           cat: 'tech',    domain: 'technologyreview.com' },
+  { name: '9to5Mac',          url: 'https://9to5mac.com/feed/',                                        cat: 'tech',    domain: '9to5mac.com' },
+  { name: 'Android Police',   url: 'https://androidpolice.com/feed/',                                  cat: 'tech',    domain: 'androidpolice.com' },
+  { name: 'Slashdot',         url: 'http://rss.slashdot.org/Slashdot/slashdotMain',                   cat: 'tech',    domain: 'slashdot.org' },
+  { name: 'The Register',     url: 'https://www.theregister.com/headlines.atom',                       cat: 'tech',    domain: 'theregister.com' },
+  { name: 'MacRumors',        url: 'https://feeds.macrumors.com/MacRumors-All',                        cat: 'tech',    domain: 'macrumors.com' },
+  { name: 'TechRadar',        url: 'https://www.techradar.com/rss',                                    cat: 'tech',    domain: 'techradar.com' },
+  { name: 'PCMag',            url: 'https://www.pcmag.com/news/rss',                                   cat: 'tech',    domain: 'pcmag.com' },
+  { name: 'Digital Trends',   url: 'https://www.digitaltrends.com/feed/',                              cat: 'tech',    domain: 'digitaltrends.com' },
+  { name: '9to5Google',       url: 'https://9to5google.com/feed/',                                     cat: 'tech',    domain: '9to5google.com' },
+  { name: 'Electrek',         url: 'https://electrek.co/feed/',                                        cat: 'tech',    domain: 'electrek.co' },
+  // Business / Finance
+  { name: 'CNBC',             url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html',            cat: 'business',domain: 'cnbc.com' },
+  { name: 'MarketWatch',      url: 'https://www.marketwatch.com/rss/topstories',                       cat: 'business',domain: 'marketwatch.com' },
+  { name: 'Business Insider', url: 'https://feeds.businessinsider.com/custom/all',                     cat: 'business',domain: 'businessinsider.com' },
+  { name: 'Fortune',          url: 'https://fortune.com/feed/',                                        cat: 'business',domain: 'fortune.com' },
+  { name: 'Fast Company',     url: 'https://www.fastcompany.com/rss.xml',                              cat: 'business',domain: 'fastcompany.com' },
+  { name: 'Inc.',             url: 'https://www.inc.com/rss/',                                         cat: 'business',domain: 'inc.com' },
+  { name: 'Quartz',           url: 'https://qz.com/feed',                                             cat: 'business',domain: 'qz.com' },
+  { name: 'Bloomberg',        url: 'https://feeds.bloomberg.com/politics/news.rss',                    cat: 'business',domain: 'bloomberg.com' },
+  { name: 'The Economist',    url: 'https://www.economist.com/latest/rss.xml',                         cat: 'business',domain: 'economist.com' },
+  { name: 'Guardian Business',url: 'https://www.theguardian.com/business/rss',                        cat: 'business',domain: 'theguardian.com' },
+  { name: 'Reuters Business', url: 'https://feeds.reuters.com/reuters/businessNews',                   cat: 'business',domain: 'reuters.com' },
+  { name: 'BBC Business',     url: 'http://feeds.bbci.co.uk/news/business/rss.xml',                    cat: 'business',domain: 'bbc.co.uk' },
+  // Science / Health
+  { name: 'Scientific American', url: 'http://rss.sciam.com/ScientificAmerican-Global',               cat: 'science', domain: 'scientificamerican.com' },
+  { name: 'New Scientist',    url: 'https://www.newscientist.com/feed/home/',                          cat: 'science', domain: 'newscientist.com' },
+  { name: 'Science Daily',    url: 'https://www.sciencedaily.com/rss/all.xml',                         cat: 'science', domain: 'sciencedaily.com' },
+  { name: 'NASA',             url: 'https://www.nasa.gov/news-release/feed/',                          cat: 'science', domain: 'nasa.gov' },
+  { name: 'Space.com',        url: 'https://www.space.com/feeds/all',                                  cat: 'science', domain: 'space.com' },
+  { name: 'Popular Science',  url: 'https://www.popsci.com/feed/',                                     cat: 'science', domain: 'popsci.com' },
+  { name: 'Phys.org',         url: 'https://phys.org/rss-feed/',                                       cat: 'science', domain: 'phys.org' },
+  { name: 'Medical Xpress',   url: 'https://medicalxpress.com/rss-feed/',                              cat: 'science', domain: 'medicalxpress.com' },
+  { name: 'Live Science',     url: 'https://www.livescience.com/feeds/all',                            cat: 'science', domain: 'livescience.com' },
+  { name: 'Science News',     url: 'https://www.sciencenews.org/feed',                                 cat: 'science', domain: 'sciencenews.org' },
+  { name: 'EurekAlert',       url: 'https://www.eurekalert.org/rss.xml',                               cat: 'science', domain: 'eurekalert.org' },
+  { name: 'BBC Science',      url: 'http://feeds.bbci.co.uk/news/science_and_environment/rss.xml',     cat: 'science', domain: 'bbc.co.uk' },
+  // Politics
+  { name: 'Politico',         url: 'https://www.politico.com/rss/politicopicks.xml',                   cat: 'politics',domain: 'politico.com' },
+  { name: 'National Review',  url: 'https://www.nationalreview.com/feed/',                             cat: 'politics',domain: 'nationalreview.com' },
+  { name: 'The Nation',       url: 'https://www.thenation.com/feed/?post-type=article',                cat: 'politics',domain: 'thenation.com' },
+  { name: 'Mother Jones',     url: 'https://www.motherjones.com/feed/',                                cat: 'politics',domain: 'motherjones.com' },
+  { name: 'Reason',           url: 'https://reason.com/feed/',                                         cat: 'politics',domain: 'reason.com' },
+  { name: 'The Atlantic',     url: 'https://www.theatlantic.com/feed/all/',                            cat: 'politics',domain: 'theatlantic.com' },
+  { name: 'The Intercept',    url: 'https://theintercept.com/feed/?rss',                               cat: 'politics',domain: 'theintercept.com' },
+  { name: 'NPR Politics',     url: 'https://feeds.npr.org/1014/rss.xml',                               cat: 'politics',domain: 'npr.org' },
+  // Sports
+  { name: 'ESPN',             url: 'https://www.espn.com/espn/rss/news',                               cat: 'sports',  domain: 'espn.com' },
+  { name: 'BBC Sport',        url: 'http://feeds.bbci.co.uk/sport/rss.xml',                            cat: 'sports',  domain: 'bbc.co.uk' },
+  { name: 'Sports Illustrated',url: 'https://www.si.com/rss/si_topstories.rss',                       cat: 'sports',  domain: 'si.com' },
+  { name: 'Bleacher Report',  url: 'https://bleacherreport.com/articles/feed',                         cat: 'sports',  domain: 'bleacherreport.com' },
+  { name: 'CBS Sports',       url: 'https://www.cbssports.com/rss/headlines/',                         cat: 'sports',  domain: 'cbssports.com' },
+  { name: 'Sky Sports',       url: 'https://www.skysports.com/rss/12040',                              cat: 'sports',  domain: 'skysports.com' },
+  { name: 'Guardian Sport',   url: 'https://www.theguardian.com/sport/rss',                            cat: 'sports',  domain: 'theguardian.com' },
+  { name: 'NPR Sports',       url: 'https://feeds.npr.org/1055/rss.xml',                               cat: 'sports',  domain: 'npr.org' },
+  // Entertainment
+  { name: 'Variety',          url: 'https://variety.com/feed/',                                        cat: 'entertainment', domain: 'variety.com' },
+  { name: 'Hollywood Reporter',url: 'https://www.hollywoodreporter.com/feed/',                        cat: 'entertainment', domain: 'hollywoodreporter.com' },
+  { name: 'Rolling Stone',    url: 'https://www.rollingstone.com/feed/',                               cat: 'entertainment', domain: 'rollingstone.com' },
+  { name: 'Pitchfork',        url: 'https://pitchfork.com/rss/news/feed.xml',                          cat: 'entertainment', domain: 'pitchfork.com' },
+  { name: 'Billboard',        url: 'https://www.billboard.com/feed/',                                  cat: 'entertainment', domain: 'billboard.com' },
+  { name: 'Deadline',         url: 'https://deadline.com/feed/',                                       cat: 'entertainment', domain: 'deadline.com' },
+  { name: 'The AV Club',      url: 'https://www.avclub.com/rss',                                      cat: 'entertainment', domain: 'avclub.com' },
+  { name: 'Screen Rant',      url: 'https://screenrant.com/feed/',                                     cat: 'entertainment', domain: 'screenrant.com' },
+  { name: 'IGN',              url: 'https://www.ign.com/articles/feed',                                cat: 'entertainment', domain: 'ign.com' },
+  { name: 'EW',               url: 'https://ew.com/feed/',                                             cat: 'entertainment', domain: 'ew.com' },
+];
+
+/* Build lookup: source name -> category */
+const SOURCE_CAT = { 'Hacker News': 'tech', 'Google News': 'world' };
+for (const f of CATEGORIZED_FEEDS) SOURCE_CAT[f.name] = f.cat;
+
+/* Build lookup: source name -> domain for favicons */
+const SOURCE_DOMAINS = { 'Hacker News': 'https://news.ycombinator.com', 'Google News': 'https://news.google.com' };
+for (const f of CATEGORIZED_FEEDS) SOURCE_DOMAINS[f.name] = `https://${f.domain}`;
+
+/* Category colour palette (replaces per-source SOURCE_COLORS) */
+const CAT_COLORS = {
+  world:         { bg: '#eff6ff', fg: '#1e40af', border: '#bfdbfe' },
+  tech:          { bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa' },
+  business:      { bg: '#f0fdf4', fg: '#15803d', border: '#bbf7d0' },
+  science:       { bg: '#ecfdf5', fg: '#065f46', border: '#a7f3d0' },
+  politics:      { bg: '#faf5ff', fg: '#7e22ce', border: '#e9d5ff' },
+  sports:        { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
+  entertainment: { bg: '#fdf4ff', fg: '#86198f', border: '#f0abfc' },
+};
+
+function sourceColor(name) {
+  const cat = SOURCE_CAT[name] || 'world';
+  return CAT_COLORS[cat] || CAT_COLORS.world;
+}
+
+const HN_BEST   = q =>
+  `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=30`;
+const HN_RECENT = q =>
+  `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=30`;
+const GNEWS_RSS = q =>
+  `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+
+const CORS = url =>
+  `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+
+/* Favicon helper */
+function faviconUrl(articleUrl) {
+  try {
+    const host = new URL(articleUrl).hostname;
+    return `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
+  } catch {
+    return '';
+  }
+}
+
+function sourceFavicon(sourceName) {
+  const domain = SOURCE_DOMAINS[sourceName];
+  return domain ? faviconUrl(domain) : '';
+}
+
+/* ---- WASM module bootstrap -------------------------------------------- */
+
+/*
+ * FIX: Handle the race condition where WASM may have already initialized
+ * before this script runs. Check Module.calledRun (Emscripten sets this
+ * after runtime init) as a fallback.
+ */
+let wasmReady = false;
+let wasmModule = null;
+
+if (typeof Module !== 'undefined' && Module.calledRun) {
+  wasmReady  = true;
+  wasmModule = Module;
+}
+
+if (typeof Module !== 'undefined') {
+  Module.onRuntimeInitialized = () => {
+    wasmReady  = true;
+    wasmModule = Module;
+  };
+}
+
+/* ---- Fetch helpers ---------------------------------------------------- */
+
+async function fetchHN(query) {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(HN_BEST(query)),
+      fetch(HN_RECENT(query)),
+    ]);
+    const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+    const hits = [...(d1.hits || []), ...(d2.hits || [])];
+    const seen = new Set();
+    return hits
+      .filter(h => { if (seen.has(h.objectID)) return false; seen.add(h.objectID); return true; })
+      .map(h => ({
+        title:       h.title      || '',
+        url:         h.url        || `https://news.ycombinator.com/item?id=${h.objectID}`,
+        description: h.story_text || '',
+        source:      'Hacker News',
+        pubDate:     h.created_at || '',
+      }));
+  } catch { return []; }
+}
+
+async function fetchGoogleNews(query) {
+  try {
+    const r = await fetch(CORS(GNEWS_RSS(query)));
+    if (!r.ok) return [];
+    const data = await r.json();
+    return parseRSS(data.contents || '', 'Google News');
+  } catch { return []; }
+}
+
+function parseRSS(xmlText, sourceName) {
+  try {
+    const doc   = new DOMParser().parseFromString(xmlText, 'text/xml');
+    const items = doc.querySelectorAll('item');
+    const arts  = [];
+    items.forEach(item => {
+      const g = sel => { const n = item.querySelector(sel); return n ? (n.textContent || '') : ''; };
+      const title = g('title').trim();
+      const url   = g('link').trim();
+      if (!title) return;
+      arts.push({
+        title,
+        url:         url || '',
+        description: g('description').replace(/<[^>]+>/g, '').trim().slice(0, 300),
+        source:      sourceName,
+        pubDate:     g('pubDate').trim(),
+      });
+    });
+    return arts;
+  } catch { return []; }
+}
+
+const FETCH_TIMEOUT_MS = 8000;
+async function fetchWithTimeout(url) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(id);
+    return r;
+  } catch (e) {
+    clearTimeout(id);
+    throw e;
+  }
+}
+
+async function fetchRSS({ name, url }) {
+  try {
+    const r    = await fetchWithTimeout(CORS(url));
+    if (!r.ok) return [];
+    const data = await r.json();
+    return parseRSS(data.contents || '', name);
+  } catch { return []; }
+}
+
+/* ---- Deduplication ---------------------------------------------------- */
+
+function dedup(articles) {
+  const seen = new Set();
+  return articles.filter(a => {
+    const key = a.url || a.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/* ---- WASM call -------------------------------------------------------- */
+
+function runWASM(articles, query) {
+  const json = JSON.stringify(articles);
+  const ptr  = wasmModule.ccall(
+    'process_articles', 'number', ['string', 'string'], [json, query]
+  );
+  return JSON.parse(wasmModule.UTF8ToString(ptr));
+}
+
+/* ---- Render ----------------------------------------------------------- */
+
+function relClass(r) {
+  if (r >= 0.5) return 'high';
+  if (r >= 0.2) return 'medium';
+  return 'low';
+}
+
+function relLabel(r) {
+  if (r >= 0.5) return 'High relevance';
+  if (r >= 0.2) return 'Medium relevance';
+  return 'Low relevance';
+}
+
+function fmtDate(s) {
+  if (!s) return '';
+  try {
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return '';
+    const now = Date.now();
+    const diff = now - d.getTime();
+
+    /* Future dates or very old -- just show month + day */
+    if (diff < 0 || diff > 30 * 24 * 60 * 60 * 1000) {
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return 'yesterday';
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch { return ''; }
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderSourcePills(sources, articles) {
+  /* Build a map of source -> first article url for favicon */
+  const sourceUrlMap = {};
+  for (const a of articles) {
+    if (!sourceUrlMap[a.source] && a.url) {
+      sourceUrlMap[a.source] = a.url;
+    }
+  }
+
+  return sources.map(s => {
+    const c = sourceColor(s);
+    const favicon = sourceFavicon(s);
+    const imgTag = favicon
+      ? `<img src="${escHtml(favicon)}" alt="" width="12" height="12" loading="lazy" onerror="this.style.display='none'">`
+      : '';
+    return `<span class="source-pill" style="background:${c.bg};color:${c.fg};border:1px solid ${c.border}">
+      ${imgTag}${escHtml(s)}
+    </span>`;
+  }).join('');
+}
+
+function renderClusters(clusters) {
+  const el = document.getElementById('results');
+  if (!clusters.length) {
+    el.innerHTML = `
+      <div class="empty-state">
+        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+        <div class="empty-state-title">No results found</div>
+        <div class="empty-state-msg">Try a different search term or broaden your query to find more articles.</div>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = clusters.map((clust, ci) => {
+    const sources = [...new Set(clust.articles.map(a => a.source))];
+    const badge   = `${clust.articles.length} article${clust.articles.length !== 1 ? 's' : ''}`;
+
+    const artRows = clust.articles.map(a => {
+      const date = fmtDate(a.pubDate);
+      const desc = a.description ? escHtml(a.description) : '';
+      const favicon = a.url ? faviconUrl(a.url) : sourceFavicon(a.source);
+      const faviconImg = favicon
+        ? `<img src="${escHtml(favicon)}" alt="" width="14" height="14" loading="lazy" onerror="this.style.display='none'">`
+        : '';
+      return `
+        <a class="article" href="${escHtml(a.url)}" target="_blank" rel="noopener"
+           aria-label="${escHtml(a.title)} - ${escHtml(a.source)}${date ? ' - ' + escHtml(date) : ''}">
+          <div class="rel-dot ${relClass(a.relevance)}" title="${escHtml(relLabel(a.relevance))}"></div>
+          <div class="article-info">
+            <div class="article-title">${escHtml(a.title)}</div>
+            ${desc ? `<div class="article-desc">${desc}</div>` : ''}
+            <div class="article-meta">
+              <span class="article-source">${faviconImg}${escHtml(a.source)}</span>
+              ${date ? `<span class="article-date">${escHtml(date)}</span>` : ''}
+              <span title="${escHtml(relLabel(a.relevance))}" style="display:inline-flex;align-items:center;gap:2px">
+                <span class="rel-dot ${relClass(a.relevance)}" style="margin:0;width:6px;height:6px"></span>
+                <span style="font-size:11px">${escHtml(relLabel(a.relevance))}</span>
+              </span>
+            </div>
+          </div>
+        </a>`;
+    }).join('');
+
+    const animDelay = `animation-delay: ${ci * 0.05}s`;
+
+    return `
+      <div class="cluster ${ci === 0 ? 'open' : ''}" data-idx="${ci}" style="${animDelay}">
+        <div class="cluster-header" onclick="toggleCluster(${ci})" role="button" tabindex="0"
+             aria-expanded="${ci === 0 ? 'true' : 'false'}"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCluster(${ci})}">
+          <svg class="cluster-toggle" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polyline points="5,2 11,8 5,14"/>
+          </svg>
+          <div class="cluster-headline">${escHtml(clust.representative)}</div>
+          <div class="cluster-meta">
+            <div class="badge">${escHtml(badge)}</div>
+            <div class="cluster-sources">${renderSourcePills(sources, clust.articles)}</div>
+          </div>
+        </div>
+        <div class="cluster-body" role="region">${artRows}</div>
+      </div>`;
+  }).join('');
+}
+
+function toggleCluster(idx) {
+  const el = document.querySelector(`.cluster[data-idx="${idx}"]`);
+  if (!el) return;
+  el.classList.toggle('open');
+  const header = el.querySelector('.cluster-header');
+  if (header) {
+    header.setAttribute('aria-expanded', el.classList.contains('open'));
+  }
+}
+
+/* ---- Status / progress helpers ---------------------------------------- */
+
+function setStatus(msg, spinning) {
+  const el = document.getElementById('status');
+  el.innerHTML = `<div class="status-row">${
+    spinning ? '<div class="spinner"></div>' : ''
+  }<span>${msg}</span></div>`;
+}
+
+function createProgressTracker(total) {
+  const el = document.getElementById('status');
+  let loaded = 0;
+  let totalArticles = 0;
+
+  el.innerHTML = `
+    <div class="status-row">
+      <div class="spinner"></div>
+      <span id="progress-text">Fetching news from ${total} sources...</span>
+    </div>
+    <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
+  `;
+
+  return {
+    update(_name, _status, count) {
+      loaded++;
+      if (count > 0) totalArticles += count;
+      const fill = document.getElementById('progress-fill');
+      if (fill) fill.style.width = `${Math.round((loaded / total) * 100)}%`;
+      const text = document.getElementById('progress-text');
+      if (text) text.textContent = `Fetched ${loaded}/${total} sources · ${totalArticles} articles found`;
+    }
+  };
+}
+
+/* Skeleton placeholder while loading */
+function showSkeleton() {
+  const el = document.getElementById('results');
+  el.innerHTML = Array.from({ length: 3 }, (_, i) => `
+    <div class="skeleton-cluster" style="animation-delay: ${i * 0.1}s">
+      <div class="skeleton-line w-75"></div>
+      <div class="skeleton-line w-50"></div>
+      <div class="skeleton-line w-30"></div>
+    </div>
+  `).join('');
+}
+
+/* ---- Filter & sort state ---------------------------------------------- */
+
+let rawClusters = [];
+const filterState = { time: 'all', cat: 'all', sort: 'relevance' };
+
+function getArticleDate(art) {
+  if (!art.pubDate) return null;
+  try { const d = new Date(art.pubDate); return isNaN(d.getTime()) ? null : d; }
+  catch { return null; }
+}
+
+function clusterNewestDate(cluster) {
+  let newest = null;
+  for (const a of cluster.articles) {
+    const d = getArticleDate(a);
+    if (d && (!newest || d > newest)) newest = d;
+  }
+  return newest;
+}
+
+function applyFiltersAndSort(clusters) {
+  const { time, cat, sort } = filterState;
+  const daysLimit = (time === 'all') ? null : parseInt(time, 10);
+  const now = Date.now();
+
+  let result = clusters.map(cluster => {
+    let articles = cluster.articles;
+
+    /* Date filter: keep article if within range (undated articles pass through) */
+    if (daysLimit) {
+      articles = articles.filter(a => {
+        const d = getArticleDate(a);
+        if (!d) return true;
+        return (now - d.getTime()) / 86400000 <= daysLimit;
+      });
+    }
+
+    /* Category filter */
+    if (cat !== 'all') {
+      articles = articles.filter(a => (SOURCE_CAT[a.source] || 'world') === cat);
+    }
+
+    if (articles.length === 0) return null;
+
+    const avg = articles.reduce((s, a) => s + (a.relevance || 0), 0) / articles.length;
+    return { ...cluster, articles, count: articles.length, avg_relevance: avg };
+  }).filter(Boolean);
+
+  /* Zero-relevance pruning (only in relevance sort mode, when some clusters do have matches) */
+  if (sort === 'relevance') {
+    const relevant = result.filter(c => c.avg_relevance > 0);
+    if (relevant.length > 0) result = relevant;
+  }
+
+  /* Sort */
+  if (sort === 'relevance') {
+    result.sort((a, b) => b.avg_relevance - a.avg_relevance || b.count - a.count);
+  } else if (sort === 'newest') {
+    result.sort((a, b) => {
+      const da = clusterNewestDate(a) || new Date(0);
+      const db = clusterNewestDate(b) || new Date(0);
+      return db - da;
+    });
+  } else if (sort === 'coverage') {
+    result.sort((a, b) => b.count - a.count);
+  }
+
+  return result;
+}
+
+/* ---- Main search flow ------------------------------------------------- */
+
+async function doSearch() {
+  const query = document.getElementById('query').value.trim();
+  if (!query) return;
+
+  if (!wasmReady) {
+    setStatus('WASM module loading, please wait...', true);
+    return;
+  }
+
+  /* Update URL for shareability */
+  const url = new URL(location);
+  url.searchParams.set('q', query);
+  history.replaceState(null, '', url);
+
+  document.getElementById('search-btn').disabled = true;
+  document.getElementById('filter-bar').classList.remove('visible');
+  showSkeleton();
+
+  const total = 2 + CATEGORIZED_FEEDS.length; /* HN + GoogleNews + RSS */
+  const progress = createProgressTracker(total);
+
+  const hnPromise = fetchHN(query).then(arts => {
+    progress.update('Hacker News', arts.length > 0 ? 'loaded' : 'failed', arts.length);
+    return arts;
+  });
+
+  const gnPromise = fetchGoogleNews(query).then(arts => {
+    progress.update('Google News', arts.length > 0 ? 'loaded' : 'failed', arts.length);
+    return arts;
+  });
+
+  const rssPromises = CATEGORIZED_FEEDS.map(feed =>
+    fetchRSS(feed).then(arts => {
+      progress.update(feed.name, arts.length > 0 ? 'loaded' : 'failed', arts.length);
+      return arts;
+    })
+  );
+
+  const [hnArts, gnewsArts, ...rssResults] = await Promise.all([
+    hnPromise,
+    gnPromise,
+    ...rssPromises,
+  ]);
+
+  const rssArts = rssResults.flat();
+  const all     = dedup([...hnArts, ...gnewsArts, ...rssArts]);
+  const sources = new Set(all.map(a => a.source));
+
+  if (all.length === 0) {
+    document.getElementById('results').innerHTML = `
+      <div class="empty-state">
+        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <div class="empty-state-title">No articles fetched</div>
+        <div class="empty-state-msg">All sources failed to respond. Check your connection and try again.</div>
+      </div>`;
+    setStatus('');
+    document.getElementById('search-btn').disabled = false;
+    return;
+  }
+
+  setStatus(`Analyzing ${all.length} articles from ${sources.size} sources...`, true);
+  await new Promise(r => requestAnimationFrame(r));
+
+  let clusters = [];
+  try {
+    clusters = runWASM(all, query);
+  } catch (err) {
+    document.getElementById('results').innerHTML = `
+      <div class="error-banner">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="8" r="6"/>
+          <line x1="8" y1="5" x2="8" y2="8.5"/>
+          <line x1="8" y1="10.5" x2="8.01" y2="10.5"/>
+        </svg>
+        <span>Analysis failed: ${escHtml(err.message)}. The raw articles were fetched but could not be clustered.</span>
+      </div>`;
+    setStatus('');
+    document.getElementById('search-btn').disabled = false;
+    return;
+  }
+
+  rawClusters = clusters;
+
+  const display = applyFiltersAndSort(rawClusters);
+  const totalArticles = display.reduce((s, c) => s + c.articles.length, 0);
+  setStatus(
+    `${display.length} cluster${display.length !== 1 ? 's' : ''} &middot; ` +
+    `${totalArticles} article${totalArticles !== 1 ? 's' : ''} &middot; ` +
+    `${sources.size} sources`
+  );
+
+  document.getElementById('filter-bar').classList.add('visible');
+  renderClusters(display);
+  document.getElementById('search-btn').disabled = false;
+}
+
+/* ---- Suggestion buttons ----------------------------------------------- */
+
+function handleSuggestClick(e) {
+  const btn = e.target.closest('.suggest-btn');
+  if (!btn) return;
+  const q = btn.getAttribute('data-q');
+  if (q) {
+    document.getElementById('query').value = q;
+    doSearch();
+  }
+}
+
+document.getElementById('results').addEventListener('click', handleSuggestClick);
+
+/* ---- Filter bar events ------------------------------------------------- */
+
+document.getElementById('filter-bar').addEventListener('click', e => {
+  const pill = e.target.closest('.filter-pill');
+  if (!pill) return;
+  const filter = pill.dataset.filter;
+  const value  = pill.dataset.value;
+  if (!filter || filterState[filter] === value) return;
+
+  filterState[filter] = value;
+
+  /* Toggle active pill in this group */
+  pill.closest('.filter-row').querySelectorAll('.filter-pill')
+    .forEach(p => p.classList.toggle('active', p === pill));
+
+  /* Re-render from stored clusters */
+  if (!rawClusters.length) return;
+  const display = applyFiltersAndSort(rawClusters);
+  const totalArticles = display.reduce((s, c) => s + c.articles.length, 0);
+  setStatus(
+    `${display.length} cluster${display.length !== 1 ? 's' : ''} &middot; ` +
+    `${totalArticles} article${totalArticles !== 1 ? 's' : ''}`
+  );
+  renderClusters(display);
+});
+
+/* ---- Event wiring ----------------------------------------------------- */
+
+document.getElementById('search-btn').addEventListener('click', doSearch);
+document.getElementById('query').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+
+/*
+ * FIX: The DOMContentLoaded race -- by the time this inline script runs
+ * at the bottom of <body>, DOMContentLoaded has almost certainly fired.
+ * Instead, just call doSearch directly if there's a query param.
+ */
+const initQuery = new URLSearchParams(location.search).get('q');
+if (initQuery) {
+  document.getElementById('query').value = initQuery;
+  /* Wait a tick for WASM to potentially finish initializing */
+  setTimeout(doSearch, 50);
+}
+</script>
+</body>
+</html>

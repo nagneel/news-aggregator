@@ -1,0 +1,12 @@
+# Generated files — rebuilt by ./build.sh
+web/news.js
+web/news.wasm
+
+# Downloaded dependencies
+vendor/
+
+# macOS
+.DS_Store
+
+# Claude
+.claude/
